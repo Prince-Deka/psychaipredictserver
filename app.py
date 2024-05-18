@@ -1,5 +1,3 @@
-
-
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import numpy as np
@@ -53,12 +51,12 @@ def predict():
     image = cv2.cvtColor(cropped, cv2.COLOR_BGR2GRAY)
     image = cv2.resize(image, (48, 48))
     image = image / 255.0
-    # image = np.reshape(image, (1, 48, 48, 1))
+    image = np.reshape(image, (1, 48, 48, 1))
 
     # Load the model and predict
-    model = load_model('mymodel.h5', compile=False)
+    model = load_model('model.h5', compile=False)
     prediction = model.predict(image)
-    label_map = ['Happy', 'Neutral', 'Fear', 'Anger', 'Sad', 'Surprise']
+    label_map = ['Anger', 'Neutral', 'Fear', 'Happy', 'Sad', 'Surprise']
     predicted_index = np.argmax(prediction)
     final_prediction = label_map[predicted_index]
 

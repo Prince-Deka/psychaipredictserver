@@ -1,35 +1,19 @@
+
+
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import numpy as np
+import cv2
 import os
-from tensorflow.keras.models import load_model
-from tensorflow.keras.preprocessing.image import load_img, img_to_array
+from keras.models import load_model
+
+
+
+
 
 app = Flask(__name__)
 CORS(app, support_credentials=True)  # Enabling CORS
 
-# Load the pre-trained model (make sure the path is accessible)
-model = load_model('mymodel.h5', compile=False)
-
-def preprocess_image(image_path, img_width, img_height):
-    """
-    Preprocess the image to fit the model's input requirements.
-    """
-    img = load_img(image_path, target_size=(img_width, img_height), color_mode='grayscale')
-    img_array = img_to_array(img)
-    img_array /= 255.0
-    img_array = np.expand_dims(img_array, axis=0)
-    return img_array
-
-def predict_emotion(image_path, model, img_width, img_height):
-    """
-    Predicts the emotion of an image using a pre-trained model.
-    """
-    img_array = preprocess_image(image_path, img_width, img_height)
-    predictions = model.predict(img_array)
-    class_labels = ['Angry', 'Happy', 'Sad', 'Surprise', 'Neutral']  # Modify as per your labels
-    predicted_class = np.argmax(predictions, axis=1)[0]
-    return class_labels[predicted_class]
 
 @app.route('/')
 def home():
@@ -37,26 +21,48 @@ def home():
 
 @app.route('/predict', methods=['POST'])
 def predict():
-    # Check if an image file was sent
-    if 'file1' not in request.files:
-        return jsonify({'error': 'No file part'}), 400
+    # Ensure the static folder exists
+    static_folder = 'static'
+    if not os.path.exists(static_folder):
+        os.makedirs(static_folder)
+ 
     file = request.files['file1']
     if file.filename == '':
         return jsonify({'error': 'No file selected for uploading'}), 400
 
     # Save the received image
-    static_folder = 'static'
-    if not os.path.exists(static_folder):
-        os.makedirs(static_folder)
-    filename = os.path.join(static_folder, 'uploaded_image.jpg')
+    filename = os.path.join(static_folder, 'file.jpg')
     file.save(filename)
 
-    # Predict emotion
-    try:
-        predicted_emotion = predict_emotion(filename, model, 48, 48)
-        return jsonify({'emotion': predicted_emotion})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    # Process the image
+    img = cv2.imread(filename)
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    cascade = cv2.CascadeClassifier('haarcascade_frontalface_alt2.xml')
+    faces = cascade.detectMultiScale(gray, 1.1, 3)
+    face_detected = False
+
+    for x, y, w, h in faces:
+        face_detected = True
+        cv2.rectangle(img, (x, y), (x+w, y+h), (0, 255, 0), 2)
+        cropped = img[y:y+h, x:x+w]
+
+    # If no face is detected, use the whole image
+    if not face_detected:
+        cropped = img
+
+    image = cv2.cvtColor(cropped, cv2.COLOR_BGR2GRAY)
+    image = cv2.resize(image, (48, 48))
+    image = image / 255.0
+    # image = np.reshape(image, (1, 48, 48, 1))
+
+    # Load the model and predict
+    model = load_model('mymodel.h5', compile=False)
+    prediction = model.predict(image)
+    label_map = ['Happy', 'Neutral', 'Fear', 'Anger', 'Sad', 'Surprise']
+    predicted_index = np.argmax(prediction)
+    final_prediction = label_map[predicted_index]
+
+    return jsonify({'emotion': final_prediction})
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run()
